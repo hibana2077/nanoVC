@@ -1,4 +1,5 @@
 from elevenlabs import ElevenLabs
+import pandas as pd
 
 client = ElevenLabs(
     api_key="YOUR_API_KEY",
