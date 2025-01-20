@@ -1,3 +1,4 @@
 main/data/data.csv
 main/data/train-00000-of-00003.parquet
 main/data/cleaned_data.csv
+main/train/model.pth

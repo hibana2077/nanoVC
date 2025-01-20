@@ -19,9 +19,8 @@ class FusionCore(nn.Module):
         # self.FusionCore = nn.TransformerDecoderLayer(d_model=22050, nhead=5, batch_first=True)
         self.FusionCore = nn.Sequential(
             nn.Conv1d(in_channels=20, out_channels=10, kernel_size=1, stride=1, padding=0),
-            nn.Linear(in_features=22050, out_features=22050),
             nn.SiLU(),
-            nn.Linear(in_features=22050, out_features=22050),
+            nn.Conv1d(in_channels=10, out_channels=10, kernel_size=1, stride=1, padding=0),
         )
 
     def forward(self, x_comb):

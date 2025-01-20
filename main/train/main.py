@@ -40,6 +40,9 @@ class AudioDataset(Dataset):
         # 預先計算需要的最大樣本數：10 秒 * 22050 = 220500
         self.max_samples = sample_rate * max_seconds
 
+        self.sample_rate = sample_rate
+        self.max_seconds = max_seconds
+
     def __len__(self):
         """回傳資料集長度。"""
         return len(self.inputs)
@@ -84,6 +87,8 @@ class AudioDataset(Dataset):
             # F.pad 的 padding 參數: (left, right)
             wave_tensor = F.pad(wave_tensor, (0, pad_length), "constant", 0.0)
         
+        wave_tensor = wave_tensor.reshape(self.max_seconds, self.sample_rate)
+
         return wave_tensor
 
 # 假設你的 .npz 檔案在 ./tts_dataset.npz
@@ -93,12 +98,109 @@ dataset = AudioDataset(
     max_seconds=10
 )
 
-dataloader = DataLoader(dataset, 
-                        batch_size=4,   # 設定批次大小
-                        shuffle=True)
+train_size = int(0.8 * len(dataset))
+val_size = len(dataset) - train_size
+train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
 
-for (input1_batch, input2_batch), gt_batch in dataloader:
-    print("Input1 shape:", input1_batch.shape)  # [batch_size, 220500]
-    print("Input2 shape:", input2_batch.shape)  # [batch_size, 220500]
-    print("Ground Truth shape:", gt_batch.shape)  # [batch_size, 220500]
+train_loader = DataLoader(train_dataset,
+                            batch_size=8,
+                            shuffle=True)
+val_loader = DataLoader(val_dataset,
+                            batch_size=8,
+                            shuffle=False)
+
+
+# 準備模型
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Device: {device}")
+model = NanoVC(Training=True).to(device)
+
+# 準備損失函數和優化器
+# criteria_a = nn.MSELoss()
+criteria_b = nn.KLDivLoss(reduction='batchmean')
+optimizer = optim.SGD(model.parameters(), lr=0.04, momentum=0.9, weight_decay=0.0003)
+# optimizer = optim.Adam(model.parameters(), lr=0.001)
+scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=100)
+
+stft = torchaudio.transforms.Spectrogram(
+    n_fft=1024,
+    win_length=1024,
+    hop_length=256,
+    power=None  # power=None 代表保留複數 STFT，後面可自行對 magnitude/phase 做處理
+).to(device)
+
+mel_scale = torchaudio.transforms.MelScale(
+    n_mels=80,
+    sample_rate=22050,
+    n_stft=513  # 由 n_fft//2 + 1 而來 (若 n_fft=1024，則 n_stft=513)
+).to(device)
+
+def stft_mel_loss(output_wave, gt_wave):
+    # wave -> STFT(複數頻譜) -> magnitude -> Mel
+    stft_out = stft(output_wave)  # shape: (batch, freq, time)
+    stft_gt = stft(gt_wave)
+    
+    mag_out = stft_out.abs()  # 取 magnitude
+    mag_gt = stft_gt.abs()
+    
+    mel_out = mel_scale(mag_out)  # shape: (batch, n_mels, time)
+    mel_gt = mel_scale(mag_gt)
+    
+    # 加 log
+    mel_out_log = torch.log(mel_out + 1e-7)
+    mel_gt_log = torch.log(mel_gt + 1e-7)
+
+    return F.l1_loss(mel_out_log, mel_gt_log)
+
+
+# Test criterion
+for i, ((input1, input2), gt) in enumerate(train_loader):
+    input1, input2, gt = input1.to(device), input2.to(device), gt.to(device)
+    output, output_f, input2_f = model(input1, input2)
+    input2_f = F.softmax(input2_f, dim=-1)
+    output_f = F.log_softmax(output_f, dim=-1)
+    print(output.shape, output_f.shape, input2_f.shape, gt.shape)
+    print(stft_mel_loss(output, gt), criteria_b(output_f, input2_f))
     break
+
+# 訓練與測試模型
+for epoch in range(10):
+    # 訓練階段
+    model.train()
+    model.Training = True
+    running_sftf_loss = 0.0
+    running_kld_loss = 0.0
+    running_loss = 0.0
+    for i, ((input1, input2), gt) in enumerate(tqdm(train_loader)):
+        input1, input2, gt = input1.to(device), input2.to(device), gt.to(device)
+        optimizer.zero_grad()
+        output, output_f, input2_f = model(input1, input2)
+        input2_f = F.softmax(input2_f, dim=-1)
+        output_f = F.log_softmax(output_f, dim=-1)
+        stft_loss = stft_mel_loss(output, gt)
+        kld_loss = criteria_b(output_f, input2_f)
+        loss = stft_loss + kld_loss
+        loss.backward()
+        optimizer.step()
+
+        running_kld_loss += kld_loss.item()
+        running_sftf_loss += stft_loss.item()
+        running_loss += loss.item()
+    print(f"Epoch {epoch+1}, Training Loss: {running_loss/(i+1):.5f}, STFT Loss: {running_sftf_loss/(i+1):.5f}, KLD Loss: {running_kld_loss/(i+1):.5f}")
+    scheduler.step()
+
+    # 驗證階段
+    model.eval()
+    model.Training = False
+    val_loss = 0.0
+    with torch.no_grad():
+        for i, ((input1, input2), gt) in enumerate(tqdm(val_loader)):
+            input1, input2, gt = input1.to(device), input2.to(device), gt.to(device)
+            # output, _, _ = model(input1, input2)
+            output = model(input1, input2)
+            loss = stft_mel_loss(output, gt)
+            val_loss += loss.item()
+    print(f"Epoch {epoch+1}, Validation Loss: {val_loss/(i+1):.5f}")
+
+# 保存模型
+torch.save(model.state_dict(), "model.pth")
