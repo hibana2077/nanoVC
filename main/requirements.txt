@@ -1,0 +1,6 @@
+pandas
+tqdm
+elevenlabs
+calflops
+causal-conv1d>=1.4.0
+mamba-ssm
