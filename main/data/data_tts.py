@@ -1,12 +1,14 @@
 import os
+import random
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
+from scipy.io.wavfile import write
 from pprint import pprint
 from elevenlabs import ElevenLabs
 
 # Get the ElevenLabs API key from the environment variable
-ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", '')
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", 'sk_953622cd2e2545d6c90793a7abb5809fba5ec1358954efbc')
 client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
 
 # Voice ID list
@@ -70,6 +72,11 @@ def generate_tts_pairs(voice_list, sentences, output_file="tts_dataset.npz"):
         idx_array.append(voice_idx_array)
 
     pprint(idx_array)
+    # random sampling two voices save to wav
+    random_voices = random.sample(range(num_voices), 2)
+    for i in random_voices:
+        for j in range(num_sentences):
+            write(f"voice_{i+1}_sentence_{j+1}.wav", 22050, data_array[i][j])
 
     # making pairs
 
@@ -109,8 +116,8 @@ def calculate_max_tts_generation_time(voices, sentences):
 # Execute the following code when running this script
 if __name__ == "__main__":
     # example sentences
-    # sentences = ["The first move is what sets everything in motion.", "Don't gentle into that good night"]
-    sentences = pd.read_csv('./DNGGITGN.csv')['english'].tolist()
+    sentences = ["The first move is what sets everything in motion.", "Don't gentle into that good night"]
+    # sentences = pd.read_csv('./DNGGITGN.csv')['english'].tolist()
 
     # calculate the total number of possible pairs
     total_pairs = calculate_total_pairs(len(VOICE_ID_LIST), len(sentences))
@@ -119,5 +126,5 @@ if __name__ == "__main__":
     print(f"Maximum time required to generate all TTS pairs: {max_time} times")
 
     # save the TTS dataset
-    generate_tts_pairs(VOICE_ID_LIST, sentences)
+    generate_tts_pairs(VOICE_ID_LIST, sentences, output_file="tts_dataset_test.npz")
     print("TTS dataset saved successfully!")
