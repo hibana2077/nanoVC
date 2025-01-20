@@ -10,7 +10,7 @@ ground_truths = data["ground_truths"]
 from pprint import pprint
 
 # Print the first 5 pairs
-for i in range(5):
+for i in range(min(5, len(inputs))):
     print(f"Pair {i+1}")
     print("Input 1")
     pprint(inputs[i][0].shape)
