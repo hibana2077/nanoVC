@@ -2,3 +2,7 @@ main/data/data.csv
 main/data/train-00000-of-00003.parquet
 main/data/cleaned_data.csv
 main/train/model.pth
+main/train/ground_truth.wav
+main/train/input1.wav
+main/train/input2.wav
+main/train/output.wav

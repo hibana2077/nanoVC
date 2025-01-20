@@ -118,8 +118,8 @@ model = NanoVC(Training=True).to(device)
 # 準備損失函數和優化器
 # criteria_a = nn.MSELoss()
 criteria_b = nn.KLDivLoss(reduction='batchmean')
-optimizer = optim.SGD(model.parameters(), lr=0.04, momentum=0.9, weight_decay=0.0003)
-# optimizer = optim.Adam(model.parameters(), lr=0.001)
+# optimizer = optim.SGD(model.parameters(), lr=0.04, momentum=0.9, weight_decay=0.0003)
+optimizer = optim.RMSprop(model.parameters(), lr=0.001, weight_decay=0.0003)
 scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=100)
 
 stft = torchaudio.transforms.Spectrogram(

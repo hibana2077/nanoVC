@@ -4,3 +4,4 @@ elevenlabs
 calflops
 timm
 fvcore
+scipy
