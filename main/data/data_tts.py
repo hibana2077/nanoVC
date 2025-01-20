@@ -109,12 +109,14 @@ def calculate_max_tts_generation_time(voices, sentences):
 # Execute the following code when running this script
 if __name__ == "__main__":
     # example sentences
-    sentences = ["The first move is what sets everything in motion.", "Don't gentle into that good night"]
-    # sentences = pd.read_csv('./DNGGITGN.csv')['english'].tolist()
+    # sentences = ["The first move is what sets everything in motion.", "Don't gentle into that good night"]
+    sentences = pd.read_csv('./DNGGITGN.csv')['english'].tolist()
 
     # calculate the total number of possible pairs
     total_pairs = calculate_total_pairs(len(VOICE_ID_LIST), len(sentences))
     print(f"Total possible pairs: {total_pairs}")
+    max_time = calculate_max_tts_generation_time(len(VOICE_ID_LIST), len(sentences))
+    print(f"Maximum time required to generate all TTS pairs: {max_time} times")
 
     # save the TTS dataset
     generate_tts_pairs(VOICE_ID_LIST, sentences)

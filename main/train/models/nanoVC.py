@@ -4,8 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from fvcore.nn import FlopCountAnalysis, parameter_count_table
-from feature_ext import FeatureExtractor
-from fusion_core import FusionCore
+from .feature_ext import FeatureExtractor
+from .fusion_core import FusionCore
 
 class NanoVC(nn.Module):
     def __init__(self, Training: bool = False):
