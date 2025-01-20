@@ -1,8 +1,9 @@
+import pprint
 import time
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from calflops import calculate_flops
+from fvcore.nn import FlopCountAnalysis, parameter_count_table
 from feature_ext import FeatureExtractor
 from fusion_core import FusionCore
 
@@ -32,3 +33,10 @@ if __name__ == "__main__":
     output = model(X1, X2)
     te = time.time()
     print(f"Output shape: {output.shape}, Time taken: {te-ts:.2f} seconds")
+
+    # Fvcore Flops
+    fva = FlopCountAnalysis(model, (X1, X2))
+    print(f"Flops: {fva.total()/1e9:.2f} GFLOPs")
+
+    # params = parameter_count(model)
+    print(parameter_count_table(model))
