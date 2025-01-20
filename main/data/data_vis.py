@@ -13,9 +13,9 @@ from pprint import pprint
 for i in range(min(5, len(inputs))):
     print(f"Pair {i+1}")
     print("Input 1")
-    pprint(inputs[i][0].shape)
+    print(f"Shape: {inputs[i][0].shape}, Time: {inputs[i][0].shape[0]/22050:.2f} seconds")
     print("Input 2")
-    pprint(inputs[i][1].shape)
+    print(f"Shape: {inputs[i][1].shape}, Time: {inputs[i][1].shape[0]/22050:.2f} seconds")
     print("Ground Truth")
-    pprint(ground_truths[i].shape)
+    print(f"Shape: {ground_truths[i].shape}, Time: {ground_truths[i].shape[0]/22050:.2f} seconds")
     print()
