@@ -56,7 +56,7 @@ class AudioDataset(Dataset):
         # 將 numpy array 轉成 PyTorch float tensor
         input1 = torch.from_numpy(input1).float()/32768
         input2 = torch.from_numpy(input2).float()/32768
-        ground_truth = torch.from_numpy(ground_truth).float()
+        ground_truth = torch.from_numpy(ground_truth).float()/32768
 
         # 進行 padding 或截斷處理
         input1 = self.pad_or_truncate(input1, self.max_samples)
@@ -95,7 +95,7 @@ class AudioDataset(Dataset):
 dataset = AudioDataset(
     npz_path="../data/tts_dataset.npz", 
     sample_rate=22050, 
-    max_seconds=10
+    max_seconds=3
 )
 
 train_size = int(0.8 * len(dataset))
@@ -157,10 +157,10 @@ def stft_mel_loss(output_wave, gt_wave):
 for i, ((input1, input2), gt) in enumerate(train_loader):
     input1, input2, gt = input1.to(device), input2.to(device), gt.to(device)
     output, output_f, input2_f = model(input1, input2)
-    input2_f = F.softmax(input2_f, dim=-1)
-    output_f = F.log_softmax(output_f, dim=-1)
+    input2_f = F.log_softmax(input2_f, dim=-1)
+    output_f = F.softmax(output_f, dim=-1)
     print(output.shape, output_f.shape, input2_f.shape, gt.shape)
-    print(stft_mel_loss(output, gt), criteria_b(output_f, input2_f))
+    print(stft_mel_loss(output, gt), criteria_b(input2_f, output_f))
     break
 
 # 訓練與測試模型
@@ -170,23 +170,26 @@ for epoch in range(10):
     model.Training = True
     running_sftf_loss = 0.0
     running_kld_loss = 0.0
+    running_l1_loss = 0.0
     running_loss = 0.0
     for i, ((input1, input2), gt) in enumerate(tqdm(train_loader)):
         input1, input2, gt = input1.to(device), input2.to(device), gt.to(device)
         optimizer.zero_grad()
         output, output_f, input2_f = model(input1, input2)
-        input2_f = F.softmax(input2_f, dim=-1)
-        output_f = F.log_softmax(output_f, dim=-1)
+        input2_f = F.log_softmax(input2_f, dim=-1)
+        output_f = F.softmax(output_f, dim=-1)
         stft_loss = stft_mel_loss(output, gt)
-        kld_loss = criteria_b(output_f, input2_f)
-        loss = stft_loss + kld_loss
+        l1_loss = F.l1_loss(output, gt)
+        kld_loss = criteria_b(input2_f, output_f)
+        loss = stft_loss + kld_loss + l1_loss
         loss.backward()
         optimizer.step()
 
         running_kld_loss += kld_loss.item()
         running_sftf_loss += stft_loss.item()
+        running_l1_loss += l1_loss.item()
         running_loss += loss.item()
-    print(f"Epoch {epoch+1}, Training Loss: {running_loss/(i+1):.5f}, STFT Loss: {running_sftf_loss/(i+1):.5f}, KLD Loss: {running_kld_loss/(i+1):.5f}")
+    print(f"Epoch {epoch+1}, Training Loss: {running_loss/(i+1):.5f}, STFT Loss: {running_sftf_loss/(i+1):.5f}, KLD Loss: {running_kld_loss/(i+1):.5f}, L1 Loss: {running_l1_loss/(i+1):.5f}")
     scheduler.step()
 
     # 驗證階段

@@ -49,9 +49,9 @@ class AudioDataset(Dataset):
         ground_truth = self.ground_truths[idx]
 
         # 將 numpy array 轉成 PyTorch float tensor
-        input1 = torch.from_numpy(input1).float()
-        input2 = torch.from_numpy(input2).float()
-        ground_truth = torch.from_numpy(ground_truth).float()
+        input1 = torch.from_numpy(input1).float()/32768
+        input2 = torch.from_numpy(input2).float()/32768
+        ground_truth = torch.from_numpy(ground_truth).float()/32768
 
         # 進行 padding 或截斷處理
         input1 = self.pad_or_truncate(input1, self.max_samples)
@@ -97,16 +97,18 @@ def infer_and_save_to_wav(model, input_tensor, output_path, sample_rate=22050):
         # 假設 input_tensor 是準備好的輸入數據
         output = model(*input_tensor)
         output_wave = output.view(-1).cpu().squeeze().numpy()
+        print(max(output_wave), min(output_wave))
         print(f"Output shape: {output_wave.shape}") # Output shape: (220500,)
         # 保存為 .wav
         wavfile.write(output_path, sample_rate, output_wave)
+        wavfile.write("10times_output.wav", sample_rate, output_wave*10)
 
 if __name__ == "__main__":
     
     dataset = AudioDataset(
         npz_path="../data/tts_dataset.npz",
         sample_rate=22050, 
-        max_seconds=10
+        max_seconds=3
     )
     data = dataset[0]
     sample_input1, sample_input2 = data[0]

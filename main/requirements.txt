@@ -5,3 +5,4 @@ calflops
 timm
 fvcore
 scipy
+transformers

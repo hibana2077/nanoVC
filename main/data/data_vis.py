@@ -22,3 +22,4 @@ for i in range(min(5, len(inputs))):
 
 max_shape = max([max(pair[0].shape[0], pair[1].shape[0]) for pair in inputs])
 print(f"Max shape: {max_shape}, Time: {max_shape/22050:.2f} seconds")
+print(f"Mean shape: {np.mean([pair[0].shape[0] for pair in inputs])}, Time: {np.mean([pair[0].shape[0] for pair in inputs])/22050:.2f} seconds")
