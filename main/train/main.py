@@ -54,8 +54,8 @@ class AudioDataset(Dataset):
         ground_truth = self.ground_truths[idx]
 
         # 將 numpy array 轉成 PyTorch float tensor
-        input1 = torch.from_numpy(input1).float()
-        input2 = torch.from_numpy(input2).float()
+        input1 = torch.from_numpy(input1).float()/32768
+        input2 = torch.from_numpy(input2).float()/32768
         ground_truth = torch.from_numpy(ground_truth).float()
 
         # 進行 padding 或截斷處理
