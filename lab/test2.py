@@ -1,11 +1,11 @@
+import time
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 
-t4d = torch.tensor([1,2,3,4,5])
-p1d = (0, 5)
-out = F.pad(t4d, p1d, "constant", 0)  # effectively zero padding
-print(out.size())
-print(out)
-out = out.reshape(2, 5)
-print(out.size())
-print(out)
+
+transconv1 = nn.ConvTranspose1d(in_channels=256, out_channels=256, kernel_size=5, stride=2, padding=2, output_padding=1)
+
+x = torch.rand(1, 256, 2768)
+x = transconv1(x)
+print(x.shape)  # torch.Size([1, 128, 5536])

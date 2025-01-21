@@ -85,7 +85,7 @@ class AudioDataset(Dataset):
             pad_length = max_samples - current_length
             # wave_tensor shape [current_length]
             # F.pad 的 padding 參數: (left, right)
-            wave_tensor = F.pad(wave_tensor, (0, pad_length), "constant", 0.0)
+            wave_tensor = F.pad(wave_tensor, (0, pad_length), "constant", 1e-7)
         
         wave_tensor = wave_tensor.reshape(self.max_seconds, self.sample_rate)
 
@@ -117,7 +117,7 @@ model = NanoVC(Training=True).to(device)
 
 # 準備損失函數和優化器
 # criteria_a = nn.MSELoss()
-criteria_b = nn.KLDivLoss(reduction='batchmean')
+# criteria_b = nn.KLDivLoss(reduction='batchmean')
 # optimizer = optim.SGD(model.parameters(), lr=0.04, momentum=0.9, weight_decay=0.0003)
 optimizer = optim.RMSprop(model.parameters(), lr=0.001, weight_decay=0.0003)
 scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=100)
@@ -157,10 +157,12 @@ def stft_mel_loss(output_wave, gt_wave):
 for i, ((input1, input2), gt) in enumerate(train_loader):
     input1, input2, gt = input1.to(device), input2.to(device), gt.to(device)
     output, output_f, input2_f = model(input1, input2)
-    input2_f = F.log_softmax(input2_f, dim=-1)
-    output_f = F.softmax(output_f, dim=-1)
-    print(output.shape, output_f.shape, input2_f.shape, gt.shape)
-    print(stft_mel_loss(output, gt), criteria_b(input2_f, output_f))
+    # input2_f = torch.clip(input2_f[-1], 1e-7, 1.0)
+    # output_f = torch.clip(output_f[-1], 1e-7, 1.0)
+    # input2_f = F.softmax(input2_f, dim=-1)
+    # output_f = F.log_softmax(output_f, dim=-1)
+    print(output.shape, output_f[-1].shape, input2_f[-1].shape, gt.shape)
+    print(stft_mel_loss(output, gt)) # , criteria_b(input2_f, output_f)
     break
 
 # 訓練與測試模型
@@ -176,16 +178,18 @@ for epoch in range(10):
         input1, input2, gt = input1.to(device), input2.to(device), gt.to(device)
         optimizer.zero_grad()
         output, output_f, input2_f = model(input1, input2)
-        input2_f = F.log_softmax(input2_f, dim=-1)
-        output_f = F.softmax(output_f, dim=-1)
+        # input2_f = torch.clip(input2_f[-1], 1e-7, 1.0)
+        # output_f = torch.clip(output_f[-1], 1e-7, 1.0)
+        # input2_f = F.softmax(input2_f, dim=-1)
+        # output_f = F.log_softmax(output_f, dim=-1)
         stft_loss = stft_mel_loss(output, gt)
         l1_loss = F.l1_loss(output, gt)
-        kld_loss = criteria_b(input2_f, output_f)
-        loss = stft_loss + kld_loss + l1_loss
+        # kld_loss = criteria_b(input2_f, output_f)
+        loss = stft_loss + l1_loss # + kld_loss
         loss.backward()
         optimizer.step()
 
-        running_kld_loss += kld_loss.item()
+        # running_kld_loss += kld_loss.item()
         running_sftf_loss += stft_loss.item()
         running_l1_loss += l1_loss.item()
         running_loss += loss.item()
