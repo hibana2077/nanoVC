@@ -19,3 +19,6 @@ for i in range(min(5, len(inputs))):
     print("Ground Truth")
     print(f"Shape: {ground_truths[i].shape}, Time: {ground_truths[i].shape[0]/22050:.2f} seconds")
     print()
+
+max_shape = max([max(pair[0].shape[0], pair[1].shape[0]) for pair in inputs])
+print(f"Max shape: {max_shape}, Time: {max_shape/22050:.2f} seconds")
