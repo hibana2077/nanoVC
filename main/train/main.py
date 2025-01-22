@@ -117,52 +117,65 @@ model = NanoVC(Training=True).to(device)
 
 # 準備損失函數和優化器
 # criteria_a = nn.MSELoss()
-# criteria_b = nn.KLDivLoss(reduction='batchmean')
+criteria_b = lambda x, y: 1 - F.cosine_similarity(x, y, dim=-1).mean()
 # optimizer = optim.SGD(model.parameters(), lr=0.04, momentum=0.9, weight_decay=0.0003)
 optimizer = optim.RMSprop(model.parameters(), lr=0.001, weight_decay=0.0003)
 scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=100)
 
-stft = torchaudio.transforms.Spectrogram(
-    n_fft=1024,
-    win_length=1024,
-    hop_length=256,
-    power=None  # power=None 代表保留複數 STFT，後面可自行對 magnitude/phase 做處理
-).to(device)
+def create_stft_mel_scales(device, sample_rate=22050, n_mels=80):
+    n_ffts = [256, 512, 1024, 2048]
+    stfts = [
+        torchaudio.transforms.Spectrogram(
+            n_fft=n_fft,
+            win_length=n_fft,
+            hop_length=n_fft // 4,
+            power=None
+        ).to(device)
+        for n_fft in n_ffts
+    ]
 
-mel_scale = torchaudio.transforms.MelScale(
-    n_mels=80,
-    sample_rate=22050,
-    n_stft=513  # 由 n_fft//2 + 1 而來 (若 n_fft=1024，則 n_stft=513)
-).to(device)
+    mel_scales = [
+        torchaudio.transforms.MelScale(
+            n_mels=n_mels,
+            sample_rate=sample_rate,
+            n_stft=(n_fft // 2) + 1
+        ).to(device)
+        for n_fft in n_ffts
+    ]
+
+    return stfts, mel_scales
+
+stfts, mel_scales = create_stft_mel_scales(device)
 
 def stft_mel_loss(output_wave, gt_wave):
-    # wave -> STFT(複數頻譜) -> magnitude -> Mel
-    stft_out = stft(output_wave)  # shape: (batch, freq, time)
-    stft_gt = stft(gt_wave)
-    
-    mag_out = stft_out.abs()  # 取 magnitude
-    mag_gt = stft_gt.abs()
-    
-    mel_out = mel_scale(mag_out)  # shape: (batch, n_mels, time)
-    mel_gt = mel_scale(mag_gt)
-    
-    # 加 log
-    mel_out_log = torch.log(mel_out + 1e-7)
-    mel_gt_log = torch.log(mel_gt + 1e-7)
+    losses = []
 
-    return F.l1_loss(mel_out_log, mel_gt_log)
+    for stft, mel_scale in zip(stfts, mel_scales):
+        stft_out = stft(output_wave)  # shape: (batch, freq, time)
+        stft_gt = stft(gt_wave)
 
+        mag_out = stft_out.abs()  # 取 magnitude
+        mag_gt = stft_gt.abs()
+
+        mel_out = mel_scale(mag_out)  # shape: (batch, n_mels, time)
+        mel_gt = mel_scale(mag_gt)
+
+        # 加 log
+        mel_out_log = torch.log(mel_out + 1e-10)
+        mel_gt_log = torch.log(mel_gt + 1e-10)
+
+        losses.append(F.l1_loss(mel_out_log, mel_gt_log))
+
+    # 加權求和 (權重可以根據需求調整)
+    total_loss = sum(losses) / len(losses)
+    return total_loss
 
 # Test criterion
 for i, ((input1, input2), gt) in enumerate(train_loader):
     input1, input2, gt = input1.to(device), input2.to(device), gt.to(device)
     output, output_f, input2_f = model(input1, input2)
-    # input2_f = torch.clip(input2_f[-1], 1e-7, 1.0)
-    # output_f = torch.clip(output_f[-1], 1e-7, 1.0)
-    # input2_f = F.softmax(input2_f, dim=-1)
-    # output_f = F.log_softmax(output_f, dim=-1)
     print(output.shape, output_f[-1].shape, input2_f[-1].shape, gt.shape)
-    print(stft_mel_loss(output, gt)) # , criteria_b(input2_f, output_f)
+    print(stft_mel_loss(output, gt), criteria_b(output_f[-1], input2_f[-1])) # , criteria_b(input2_f, output_f)
     break
 
 # 訓練與測試模型
@@ -171,29 +184,37 @@ for epoch in range(10):
     model.train()
     model.Training = True
     running_sftf_loss = 0.0
-    running_kld_loss = 0.0
+    running_cs_loss = 0.0
     running_l1_loss = 0.0
     running_loss = 0.0
+    running_norm = 0
+
     for i, ((input1, input2), gt) in enumerate(tqdm(train_loader)):
         input1, input2, gt = input1.to(device), input2.to(device), gt.to(device)
         optimizer.zero_grad()
         output, output_f, input2_f = model(input1, input2)
-        # input2_f = torch.clip(input2_f[-1], 1e-7, 1.0)
-        # output_f = torch.clip(output_f[-1], 1e-7, 1.0)
-        # input2_f = F.softmax(input2_f, dim=-1)
-        # output_f = F.log_softmax(output_f, dim=-1)
+        # output_f = output_f[-1]
+        # input2_f = input2_f[-1]
         stft_loss = stft_mel_loss(output, gt)
         l1_loss = F.l1_loss(output, gt)
-        # kld_loss = criteria_b(input2_f, output_f)
-        loss = stft_loss + l1_loss # + kld_loss
+        # cs_loss = criteria_b(output_f, input2_f)
+        loss = stft_loss + l1_loss# + cs_loss
         loss.backward()
         optimizer.step()
 
-        # running_kld_loss += kld_loss.item()
+        total_norm = 0
+        for p in model.parameters():
+            if p.grad is not None:
+                param_norm = p.grad.data.norm(2)
+                total_norm += param_norm.item() ** 2
+        total_norm = total_norm ** 0.5
+
+        # running_cs_loss += cs_loss.item()
         running_sftf_loss += stft_loss.item()
         running_l1_loss += l1_loss.item()
         running_loss += loss.item()
-    print(f"Epoch {epoch+1}, Training Loss: {running_loss/(i+1):.5f}, STFT Loss: {running_sftf_loss/(i+1):.5f}, KLD Loss: {running_kld_loss/(i+1):.5f}, L1 Loss: {running_l1_loss/(i+1):.5f}")
+        running_norm += total_norm
+    print(f"Epoch {epoch+1}, Training Loss: {running_loss/(i+1):.5f}, STFT Loss: {running_sftf_loss/(i+1):.5f}, L1 Loss: {running_l1_loss/(i+1):.5f}, Cosine Similarity Loss: {running_cs_loss/(i+1):.5f}, Norm: {running_norm/(i+1):.5f}")
     scheduler.step()
 
     # 驗證階段

@@ -4,13 +4,18 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from fvcore.nn import FlopCountAnalysis, parameter_count_table
-from .feature_ext import FeatureExtractor
+from transformers import AutoFeatureExtractor
 from .fusion_core import FusionCore
 
 class NanoVC(nn.Module):
     def __init__(self, Training: bool = False):
         super(NanoVC, self).__init__()
-        self.FeatureExtractor = FeatureExtractor()
+        self.FeatureExtractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base-960h")
+        
+        # Freeze FeatureExtractor
+        for param in self.FeatureExtractor.parameters():
+            param.requires_grad = False
+        
         self.FusionCore = FusionCore()
         self.Training = Training
 
@@ -21,6 +26,7 @@ class NanoVC(nn.Module):
             x_syf = self.FeatureExtractor(x_sy)
             return x_sy, x_syf, x2f
         return x_sy
+
     
 
 if __name__ == "__main__":

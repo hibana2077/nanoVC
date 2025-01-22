@@ -116,110 +116,33 @@ class GhostBottleneck(nn.Module):
 class FusionCore(nn.Module):
     def __init__(self):
         super(FusionCore, self).__init__()
-        
-        # 假設要把 (B,212,T/8) 還原回 (B,3,T)
-        # 可使用 Upsample+Conv 或 ConvTranspose1d
-        
-        # Up Block 1：從 212 -> 128
-        self.up1 = nn.Sequential(
-            nn.Upsample(scale_factor=2, mode='nearest'),
-            nn.Conv1d(256, 128, kernel_size=3, padding=1),
-            nn.LeakyReLU()
-        )
-        self.d3_adj_a = nn.Sequential(
-            nn.Upsample(scale_factor=2, mode='nearest'),
-            nn.Conv1d(256, 128, kernel_size=1, stride=1, padding=0),
-            nn.LeakyReLU()
-        )
-        # Up Block 2：從 128 -> 64
-        self.up2 = nn.Sequential(
-            nn.Upsample(scale_factor=2, mode='nearest'),
-            nn.Conv1d(128, 64, kernel_size=3, padding=1),
-            nn.LeakyReLU()
-        )
-        self.d2_adj_a = nn.Sequential(
-            nn.Conv1d(128, 64, kernel_size=1, stride=1, padding=0),
-            nn.LeakyReLU()
-        )
-        self.d2_adj_b = nn.Sequential(
-            nn.Conv1d(5513, 1024, kernel_size=1, stride=1, padding=0),
-            nn.LeakyReLU()
-        )
-        # Up Block 3：從 64 -> 32
-        self.up3 = nn.Sequential(
-            nn.Upsample(scale_factor=2, mode='nearest'),
-            nn.Conv1d(64, 32, kernel_size=3, padding=1),
-            nn.LeakyReLU()
-        )
-        self.d1_adj_a = nn.Sequential(
-            nn.Conv1d(32, 32, kernel_size=1, stride=1, padding=0),
-            nn.LeakyReLU()
-        )
-        self.d1_adj_b = nn.Sequential(
-            nn.Conv1d(11025, 2048, kernel_size=1, stride=1, padding=0),
-            nn.LeakyReLU()
-        )
-        # 最終還原到 3 channel (對應原始波形 channel 數)
-        self.final_conv = nn.Conv1d(32, 3, kernel_size=3, padding=1)
-        self.recover_conv = nn.Conv1d(2048, 22050, kernel_size=3, padding=1)
 
         self.ghost_fusion = GhostBottleneck(6, 128, 3,act_layer=nn.LeakyReLU)
 
     def forward(self, x_comb):
         """
         x_comb: (x1, x2f)
-        x1: (B, 3, T) - 這裡視需求看要不要參與Decoder運算
-        x2f: [d1, d2, d3, bottleneck] 來自Encoder (FeatureExtractor)
+        x1: (B, 3, T)
+        x2f: (B, 3, T)
         """
+
         x1, x2f = x_comb
-        d1, d2, d3, bottleneck = x2f  # 取出每層特徵
-        
-        # 逐層上採樣
-        x = self.up1(bottleneck)  # (B,128, 512)
-        d3 = self.d3_adj_a(d3)      # (B,128, 512)
-        x = x + d3
-        
-        x = self.up2(x)           # (B,64, T/2)
-        d2 = self.d2_adj_a(d2)    # (B,64, T/2)
-        d2 = d2.transpose(1, 2)   # (B, T/2, 64)
-        d2 = self.d2_adj_b(d2)    # (B, T/2, 1024)
-        d2 = d2.transpose(1, 2)
-        x = x + d2
-        
-        x = self.up3(x)           # (B,32, T)
-        d1 = self.d1_adj_a(d1)    # (B,32, T)
-        d1 = d1.transpose(1, 2)   # (B, T, 32)
-        d1 = self.d1_adj_b(d1)    # (B, T, 1024)
-        d1 = d1.transpose(1, 2)
-        x = x + d1
-        
-        # 最終輸出 (B,3,T)
-        x = self.final_conv(x)
-        
-        x = x.transpose(1, 2)
-        x = self.recover_conv(x)
-        x = x.transpose(1, 2)
 
-        # Fusion (1D-GhostNet)
+        # x12: (B, 3, T) -> (B, 6, T)
+        x12 = torch.cat([x1, x2f], dim=1)
 
-        x_comb = torch.cat([x1, x], dim=1)
-        out = self.ghost_fusion(x_comb)
-        out = F.tanh(out)
-        
-        return out
+        # x12: (B, 6, T) -> (B, 3, T)
+        x12 = self.ghost_fusion(x12)
+
+        return x12
 
 
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
     model = FusionCore().to(device)
-    X1 = torch.rand(1, 3, 22050).to(device)
-    X2 = [
-        torch.rand(1, 32, 11025).to(device),
-        torch.rand(1, 128, 5513).to(device),
-        torch.rand(1, 256, 256).to(device),
-        torch.rand(1, 256, 256).to(device)
-    ]
+    X1 = torch.rand(1, 3, 16000).to(device)
+    X2 = torch.rand(1, 3, 16000).to(device)
     ts = time.time()
     output = model((X1, X2))
     te = time.time()

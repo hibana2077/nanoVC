@@ -88,7 +88,7 @@ class AudioDataset(Dataset):
 
 def load_model(model_path, device):
     model = NanoVC(Training=False).to(device)
-    model.load_state_dict(torch.load(model_path, map_location=device))
+    model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
     model.eval()
     return model
 
