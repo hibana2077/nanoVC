@@ -4,18 +4,19 @@ import torch.nn.functional as F
 import scipy.io.wavfile as wavfile
 from models.nanoVC import NanoVC
 from torch.utils.data import Dataset
+from fvcore.nn import FlopCountAnalysis, parameter_count_table
 
 
 class AudioDataset(Dataset):
     def __init__(self, 
                  npz_path, 
-                 sample_rate=22050, 
+                 sample_rate=16000, 
                  max_seconds=10, 
                  transform=None):
         """
         Args:
             npz_path (str): 讀取 .npz 檔案的路徑。
-            sample_rate (int): 音訊的採樣率 (預設 22050)。
+            sample_rate (int): 音訊的採樣率 (預設 16000)。
             max_seconds (int): 最長秒數，用於統一 padding 長度 (預設 10 秒)。
             transform (callable, optional): 若有需要可在取資料時進行的資料轉換函式。
         """
@@ -32,7 +33,7 @@ class AudioDataset(Dataset):
         # 可以自定義的 transform，若需要在此做特徵轉換等預處理
         self.transform = transform
         
-        # 預先計算需要的最大樣本數：10 秒 * 22050 = 220500
+        # 預先計算需要的最大樣本數：10 秒 * 16000 = 160000
         self.max_samples = sample_rate * max_seconds
 
         self.sample_rate = sample_rate
@@ -107,22 +108,22 @@ if __name__ == "__main__":
     
     dataset = AudioDataset(
         npz_path="../data/tts_dataset.npz",
-        sample_rate=22050, 
+        sample_rate=16000, 
         max_seconds=3
     )
     data = dataset[0]
     sample_input1, sample_input2 = data[0]
     # 保存兩個輸入音訊
-    wavfile.write("input1.wav", 22050, sample_input1.squeeze().view(-1).numpy())
+    wavfile.write("input1.wav", 16000, sample_input1.squeeze().view(-1).numpy())
     print(f"Input1 saved to input1.wav")
-    wavfile.write("input2.wav", 22050, sample_input2.squeeze().view(-1).numpy())
+    wavfile.write("input2.wav", 16000, sample_input2.squeeze().view(-1).numpy())
     print(f"Input2 saved to input2.wav")
     sample_input1 = sample_input1.unsqueeze(0)
     sample_input2 = sample_input2.unsqueeze(0)
     print(f"Input1 shape: {sample_input1.shape}, Input2 shape: {sample_input2.shape}")
     gt = data[1]
     # 保存 ground truth
-    wavfile.write("ground_truth.wav", 22050, gt.squeeze().view(-1).numpy())
+    wavfile.write("ground_truth.wav", 16000, gt.squeeze().view(-1).numpy())
     print(f"Ground truth saved to ground_truth.wav")
     print(f"Ground truth shape: {gt.shape}")
     # 設定裝置
@@ -133,6 +134,16 @@ if __name__ == "__main__":
     model_path = "./model.pth"
     model = load_model(model_path, device)
     input_tensor = (sample_input1.to(device), sample_input2.to(device))
+    # print model size
+    print(parameter_count_table(model))
+    # print model flops
+    fva = FlopCountAnalysis(model, input_tensor)
+    if fva.total() > 1e9:
+        print(f"Flops: {fva.total()/1e9:.2f} GFLOPs")
+    elif fva.total() > 1e6:
+        print(f"Flops: {fva.total()/1e6:.2f} MFLOPs")
+    else:
+        print(f"Flops: {fva.total()} FLOPs")
 
     # 推論並保存結果
     output_path = "output.wav"

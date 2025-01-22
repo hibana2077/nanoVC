@@ -117,7 +117,13 @@ class FusionCore(nn.Module):
     def __init__(self):
         super(FusionCore, self).__init__()
 
-        self.ghost_fusion = GhostBottleneck(6, 128, 3,act_layer=nn.LeakyReLU)
+        self.ghost_fusion = nn.Sequential(
+            GhostBottleneck(6, 128, 5,act_layer=nn.LeakyReLU),
+            GhostBottleneck(5, 64, 4,act_layer=nn.LeakyReLU),
+            GhostBottleneck(4, 32, 3,act_layer=nn.LeakyReLU),
+            GhostBottleneck(3, 16, 3,act_layer=nn.LeakyReLU),
+            nn.Tanh()
+        )
 
     def forward(self, x_comb):
         """

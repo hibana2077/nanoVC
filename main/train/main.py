@@ -14,13 +14,13 @@ from models.nanoVC import NanoVC
 class AudioDataset(Dataset):
     def __init__(self, 
                  npz_path, 
-                 sample_rate=22050, 
+                 sample_rate=16000, 
                  max_seconds=10, 
                  transform=None):
         """
         Args:
             npz_path (str): 讀取 .npz 檔案的路徑。
-            sample_rate (int): 音訊的採樣率 (預設 22050)。
+            sample_rate (int): 音訊的採樣率 (預設 16000)。
             max_seconds (int): 最長秒數，用於統一 padding 長度 (預設 10 秒)。
             transform (callable, optional): 若有需要可在取資料時進行的資料轉換函式。
         """
@@ -37,7 +37,7 @@ class AudioDataset(Dataset):
         # 可以自定義的 transform，若需要在此做特徵轉換等預處理
         self.transform = transform
         
-        # 預先計算需要的最大樣本數：10 秒 * 22050 = 220500
+        # 預先計算需要的最大樣本數：10 秒 * 16000 = 160000
         self.max_samples = sample_rate * max_seconds
 
         self.sample_rate = sample_rate
@@ -94,7 +94,7 @@ class AudioDataset(Dataset):
 # 假設你的 .npz 檔案在 ./tts_dataset.npz
 dataset = AudioDataset(
     npz_path="../data/tts_dataset.npz", 
-    sample_rate=22050, 
+    sample_rate=16000, 
     max_seconds=3
 )
 
@@ -122,8 +122,8 @@ criteria_b = lambda x, y: 1 - F.cosine_similarity(x, y, dim=-1).mean()
 optimizer = optim.RMSprop(model.parameters(), lr=0.001, weight_decay=0.0003)
 scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=100)
 
-def create_stft_mel_scales(device, sample_rate=22050, n_mels=80):
-    n_ffts = [256, 512, 1024, 2048]
+def create_stft_mel_scales(device, sample_rate=16000, n_mels=80):
+    n_ffts = [512, 1024, 2048]
     stfts = [
         torchaudio.transforms.Spectrogram(
             n_fft=n_fft,
@@ -179,7 +179,8 @@ for i, ((input1, input2), gt) in enumerate(train_loader):
     break
 
 # 訓練與測試模型
-for epoch in range(10):
+best_model = None
+for epoch in range(200):
     # 訓練階段
     model.train()
     model.Training = True
@@ -188,6 +189,8 @@ for epoch in range(10):
     running_l1_loss = 0.0
     running_loss = 0.0
     running_norm = 0
+
+    best_loss = 1e9
 
     for i, ((input1, input2), gt) in enumerate(tqdm(train_loader)):
         input1, input2, gt = input1.to(device), input2.to(device), gt.to(device)
@@ -200,6 +203,7 @@ for epoch in range(10):
         # cs_loss = criteria_b(output_f, input2_f)
         loss = stft_loss + l1_loss# + cs_loss
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
 
         total_norm = 0
@@ -228,7 +232,10 @@ for epoch in range(10):
             output = model(input1, input2)
             loss = stft_mel_loss(output, gt)
             val_loss += loss.item()
+    if val_loss/(i+1) < best_loss:
+        best_loss = val_loss/(i+1)
+        best_model = model.state_dict()
     print(f"Epoch {epoch+1}, Validation Loss: {val_loss/(i+1):.5f}")
 
-# 保存模型
-torch.save(model.state_dict(), "model.pth")
+# 保存最好的模型
+torch.save(best_model, "best_model.pth")

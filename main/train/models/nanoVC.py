@@ -10,20 +10,22 @@ from .fusion_core import FusionCore
 class NanoVC(nn.Module):
     def __init__(self, Training: bool = False):
         super(NanoVC, self).__init__()
-        self.FeatureExtractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base-960h")
-        
-        # Freeze FeatureExtractor
-        for param in self.FeatureExtractor.parameters():
-            param.requires_grad = False
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.FeatureExtractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base-960h", device=self.device)
         
         self.FusionCore = FusionCore()
         self.Training = Training
+        
 
     def forward(self, x1, x2):
-        x2f = self.FeatureExtractor(x2)
+        with torch.no_grad():
+            x2f = self.FeatureExtractor(x2, sampling_rate=16000, return_tensors="pt").input_values[0]
+            x2f = x2f.to(self.device)
         x_sy = self.FusionCore((x1, x2f))
         if self.Training:
-            x_syf = self.FeatureExtractor(x_sy)
+            with torch.no_grad():
+                x_syf = self.FeatureExtractor(x_sy, sampling_rate=16000, return_tensors="pt").input_values[0]
+                x_syf = x_syf.to(self.device)
             return x_sy, x_syf, x2f
         return x_sy
 
