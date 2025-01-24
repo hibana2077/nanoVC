@@ -131,7 +131,7 @@ if __name__ == "__main__":
     print(f"Using device: {device}")
 
     # 載入模型
-    model_path = "./model.pth"
+    model_path = "./best_model.pth"
     model = load_model(model_path, device)
     input_tensor = (sample_input1.to(device), sample_input2.to(device))
     # print model size

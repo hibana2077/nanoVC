@@ -180,7 +180,7 @@ for i, ((input1, input2), gt) in enumerate(train_loader):
 
 # 訓練與測試模型
 best_model = None
-for epoch in range(200):
+for epoch in range(30): # 130
     # 訓練階段
     model.train()
     model.Training = True
@@ -196,14 +196,18 @@ for epoch in range(200):
         input1, input2, gt = input1.to(device), input2.to(device), gt.to(device)
         optimizer.zero_grad()
         output, output_f, input2_f = model(input1, input2)
-        # output_f = output_f[-1]
-        # input2_f = input2_f[-1]
+        output_f = output_f
+        input2_f = input2_f
         stft_loss = stft_mel_loss(output, gt)
         l1_loss = F.l1_loss(output, gt)
-        # cs_loss = criteria_b(output_f, input2_f)
-        loss = stft_loss + l1_loss# + cs_loss
+        cs_loss = criteria_b(output_f, input2_f)
+        # loss = stft_loss + l1_loss + cs_loss
+        if epoch < 15:
+            loss = stft_loss + l1_loss 
+        else:
+            loss = stft_loss + l1_loss + cs_loss
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
         optimizer.step()
 
         total_norm = 0
@@ -213,7 +217,7 @@ for epoch in range(200):
                 total_norm += param_norm.item() ** 2
         total_norm = total_norm ** 0.5
 
-        # running_cs_loss += cs_loss.item()
+        running_cs_loss += cs_loss.item()
         running_sftf_loss += stft_loss.item()
         running_l1_loss += l1_loss.item()
         running_loss += loss.item()
@@ -235,7 +239,8 @@ for epoch in range(200):
     if val_loss/(i+1) < best_loss:
         best_loss = val_loss/(i+1)
         best_model = model.state_dict()
+        # 保存最好的模型
+        torch.save(best_model, "best_model.pth")
     print(f"Epoch {epoch+1}, Validation Loss: {val_loss/(i+1):.5f}")
 
-# 保存最好的模型
-torch.save(best_model, "best_model.pth")
+

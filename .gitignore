@@ -6,3 +6,4 @@ main/train/ground_truth.wav
 main/train/input1.wav
 main/train/input2.wav
 main/train/output.wav
+main/train/best_model.pth

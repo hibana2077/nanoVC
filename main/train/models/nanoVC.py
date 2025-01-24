@@ -21,7 +21,9 @@ class NanoVC(nn.Module):
         with torch.no_grad():
             x2f = self.FeatureExtractor(x2, sampling_rate=16000, return_tensors="pt").input_values[0]
             x2f = x2f.to(self.device)
-        x_sy = self.FusionCore((x1, x2f))
+            x1f = self.FeatureExtractor(x1, sampling_rate=16000, return_tensors="pt").input_values[0]
+            x1f = x1f.to(self.device)
+        x_sy = self.FusionCore((x1f, x2f))
         if self.Training:
             with torch.no_grad():
                 x_syf = self.FeatureExtractor(x_sy, sampling_rate=16000, return_tensors="pt").input_values[0]

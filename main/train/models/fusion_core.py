@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from timm.models.ghostnet import _SE_LAYER
-from calflops import calculate_flops
+from fvcore.nn import parameter_count_table, FlopCountAnalysis
 
 # 輸入 X1 (原始音頻)(B,10,22050) X2 (特徵提取後的 represtation)(B,64,2768)
 # 我想用機率密度函數與采樣去做 fusion 最後吐出 X2' (融合後音頻)(B,10,22050)
@@ -117,30 +117,44 @@ class FusionCore(nn.Module):
     def __init__(self):
         super(FusionCore, self).__init__()
 
-        self.ghost_fusion = nn.Sequential(
-            GhostBottleneck(6, 128, 5,act_layer=nn.LeakyReLU),
-            GhostBottleneck(5, 64, 4,act_layer=nn.LeakyReLU),
-            GhostBottleneck(4, 32, 3,act_layer=nn.LeakyReLU),
-            GhostBottleneck(3, 16, 3,act_layer=nn.LeakyReLU),
-            nn.Tanh()
+        self.fusion_core1 = nn.Sequential(
+            GhostBottleneck(9, 256, 6,act_layer=nn.LeakyReLU, dw_kernel_size=5),
+            GhostBottleneck(6, 128, 3,act_layer=nn.LeakyReLU, dw_kernel_size=5),
+            GhostBottleneck(3, 64, 3,act_layer=nn.LeakyReLU, dw_kernel_size=5),
         )
 
+        self.fusion_core2 = nn.Sequential(
+            GhostBottleneck(9, 256, 6,act_layer=nn.LeakyReLU, dw_kernel_size=5),
+            GhostBottleneck(6, 128, 3,act_layer=nn.LeakyReLU, dw_kernel_size=5),
+            GhostBottleneck(3, 64, 3,act_layer=nn.LeakyReLU, dw_kernel_size=5),
+        )
+
+        self.fusion_core3 = nn.Sequential(
+            GhostBottleneck(9, 256, 6,act_layer=nn.LeakyReLU, dw_kernel_size=5),
+            GhostBottleneck(6, 128, 3,act_layer=nn.LeakyReLU, dw_kernel_size=5),
+            GhostBottleneck(3, 64, 3,act_layer=nn.LeakyReLU, dw_kernel_size=5),
+            nn.Tanh()
+        )
     def forward(self, x_comb):
         """
         x_comb: (x1, x2f)
-        x1: (B, 3, T)
-        x2f: (B, 3, T)
+        x1: (B, 3, S)
+        x2f: (B, 3, S)
         """
-
         x1, x2f = x_comb
+        zero = torch.zeros_like(x1)
 
-        # x12: (B, 3, T) -> (B, 6, T)
-        x12 = torch.cat([x1, x2f], dim=1)
+        # x12b: (B, 9, S)
+        x12b = torch.cat([x1, x2f, zero], dim=1)
+        # x12b_out: (B, 3, S)
+        x12b_out = self.fusion_core1(x12b)
 
-        # x12: (B, 6, T) -> (B, 3, T)
-        x12 = self.ghost_fusion(x12)
+        x12ra = torch.cat([x1, x2f, x12b_out], dim=1)
+        x12ra_out = self.fusion_core2(x12ra)
 
-        return x12
+        x12rb = torch.cat([x1, x2f, x12ra_out], dim=1)
+        x12rb_out = self.fusion_core3(x12rb)
+        return x12rb_out
 
 
 if __name__ == "__main__":
@@ -153,3 +167,6 @@ if __name__ == "__main__":
     output = model((X1, X2))
     te = time.time()
     print(f"Output shape: {output.shape}, Time taken: {te-ts:.2f} seconds")
+
+    # parameter count
+    print(parameter_count_table(model))
