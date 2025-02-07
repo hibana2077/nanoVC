@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from timm.models.ghostnet import _SE_LAYER
-from fvcore.nn import parameter_count_table, FlopCountAnalysis
+from fvcore.nn import parameter_count_table
 
 # 輸入 X1 (原始音頻)(B,10,22050) X2 (特徵提取後的 represtation)(B,64,2768)
 # 我想用機率密度函數與采樣去做 fusion 最後吐出 X2' (融合後音頻)(B,10,22050)
