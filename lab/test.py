@@ -1,45 +1,28 @@
-import pprint
-import os
-import uuid
-from elevenlabs import VoiceSettings
-from elevenlabs.client import ElevenLabs
+import torch
+import soundfile as sf
+from transformers import AutoConfig
 
-ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", 'NO_PEEKING')
-client = ElevenLabs(
-    api_key=ELEVENLABS_API_KEY,
-)
+ 
+from xcodec2.modeling_xcodec2 import XCodec2Model
+ 
+model_path = "HKUSTAudio/xcodec2"  
 
+model = XCodec2Model.from_pretrained(model_path)
+model.eval().cuda()   
 
-def text_to_speech_file(text: str) -> str:
-    # Calling the text_to_speech conversion API with detailed parameters
-    response = client.text_to_speech.convert(
-        voice_id="pNInz6obpgDQGcFmaJgB", # Adam pre-made voice
-        output_format="mp3_22050_32",
-        text=text,
-        model_id="eleven_turbo_v2_5", # use the turbo model for low latency
-        voice_settings=VoiceSettings(
-            stability=0.0,
-            similarity_boost=1.0,
-            style=0.0,
-            use_speaker_boost=True,
-        ),
-    )
+ 
+wav, sr = sf.read("test.wav")   
+wav_tensor = torch.from_numpy(wav).float().unsqueeze(0)  # Shape: (1, T)
 
-    # uncomment the line below to play the audio back
-    # play(response)
+ 
+with torch.no_grad():
+   # Only 16khz speech
+   # Only supports single input. For batch inference, please refer to the link below.
+    vq_code = model.encode_code(input_waveform=wav_tensor)
+    print("Code:", vq_code )  
 
-    # Generating a unique file name for the output MP3 file
-    save_file_path = f"{uuid.uuid4()}.mp3"
+    recon_wav = model.decode_code(vq_code).cpu()       # Shape: (1, 1, T')
 
-    # Writing the audio to a file
-    with open(save_file_path, "wb") as f:
-        for chunk in response:
-            if chunk:
-                f.write(chunk)
-
-    print(f"{save_file_path}: A new audio file was saved successfully!")
-
-    # Return the path of the saved audio file
-    return save_file_path
-
-text_to_speech_file("Hello World")
+ 
+sf.write("reconstructed.wav", recon_wav[0, 0, :].numpy(), sr)
+print("Done! Check reconstructed.wav")
