@@ -6,3 +6,4 @@ timm
 fvcore
 scipy
 transformers
+xcodec2==0.1.3
