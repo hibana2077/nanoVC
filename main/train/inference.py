@@ -81,14 +81,14 @@ class AudioDataset(Dataset):
             pad_length = max_samples - current_length
             # wave_tensor shape [current_length]
             # F.pad 的 padding 參數: (left, right)
-            wave_tensor = F.pad(wave_tensor, (0, pad_length), "constant", 0.0)
+            wave_tensor = F.pad(wave_tensor, (0, pad_length), "constant", 1e-7)
         
-        wave_tensor = wave_tensor.reshape(self.max_seconds, self.sample_rate)
+        # wave_tensor = wave_tensor.reshape(self.max_seconds, self.sample_rate)
 
         return wave_tensor
 
 def load_model(model_path, device):
-    model = NanoVC(Training=False).to(device)
+    model = NanoVC(training=False).to(device)
     model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
     model.eval()
     return model
@@ -114,10 +114,10 @@ if __name__ == "__main__":
     data = dataset[0]
     sample_input1, sample_input2 = data[0]
     # 保存兩個輸入音訊
-    wavfile.write("input1.wav", 16000, sample_input1.squeeze().view(-1).numpy())
-    print(f"Input1 saved to input1.wav")
-    wavfile.write("input2.wav", 16000, sample_input2.squeeze().view(-1).numpy())
-    print(f"Input2 saved to input2.wav")
+    # wavfile.write("input1.wav", 16000, sample_input1.squeeze().view(-1).numpy())
+    # print(f"Input1 saved to input1.wav")
+    # wavfile.write("input2.wav", 16000, sample_input2.squeeze().view(-1).numpy())
+    # print(f"Input2 saved to input2.wav")
     sample_input1 = sample_input1.unsqueeze(0)
     sample_input2 = sample_input2.unsqueeze(0)
     print(f"Input1 shape: {sample_input1.shape}, Input2 shape: {sample_input2.shape}")
@@ -137,13 +137,13 @@ if __name__ == "__main__":
     # print model size
     print(parameter_count_table(model))
     # print model flops
-    fva = FlopCountAnalysis(model, input_tensor)
-    if fva.total() > 1e9:
-        print(f"Flops: {fva.total()/1e9:.2f} GFLOPs")
-    elif fva.total() > 1e6:
-        print(f"Flops: {fva.total()/1e6:.2f} MFLOPs")
-    else:
-        print(f"Flops: {fva.total()} FLOPs")
+    # fva = FlopCountAnalysis(model, input_tensor)
+    # if fva.total() > 1e9:
+    #     print(f"Flops: {fva.total()/1e9:.2f} GFLOPs")
+    # elif fva.total() > 1e6:
+    #     print(f"Flops: {fva.total()/1e6:.2f} MFLOPs")
+    # else:
+    #     print(f"Flops: {fva.total()} FLOPs")
 
     # 推論並保存結果
     output_path = "output.wav"

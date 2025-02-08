@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import torchaudio
-from torch.utils.data import DataLoader, Dataset, random_split
+from torch.utils.data import DataLoader, Dataset, random_split, Subset
 from tqdm import tqdm
 
 from models.nanoVC import NanoVC
@@ -98,9 +98,10 @@ dataset = AudioDataset(
     max_seconds=3
 )
 
-train_size = int(0.8 * len(dataset))
-val_size = len(dataset) - train_size
-train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+dataset_subset = Subset(dataset, range(5000))
+train_size = int(0.8 * len(dataset_subset))
+val_size = len(dataset_subset) - train_size
+train_dataset, val_dataset = random_split(dataset_subset, [train_size, val_size])
 
 train_loader = DataLoader(train_dataset,
                             batch_size=8,
@@ -117,8 +118,9 @@ model = NanoVC(training=True).to(device)
 
 # 準備損失函數和優化器
 # optimizer = optim.SGD(model.parameters(), lr=0.04, momentum=0.9, weight_decay=0.0003)
-optimizer = optim.RMSprop(model.parameters(), lr=0.001, weight_decay=0.0003)
-scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=100)
+# optimizer = optim.RMSprop(model.parameters(), lr=0.001, weight_decay=0.0003)
+optimizer = optim.AdamW(model.parameters(), lr=5e-5, weight_decay=0.0003)
+scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=30)
 
 def create_stft_mel_scales(device, sample_rate=16000, n_mels=80):
     n_ffts = [512, 1024, 2048]
@@ -213,7 +215,7 @@ for epoch in range(30): # 130
         running_l1_loss += l1_loss.item()
         running_loss += loss.item()
         running_norm += total_norm
-    print(f"Epoch {epoch+1}, Training Loss: {running_loss/(i+1):.5f}, STFT Loss: {running_sftf_loss/(i+1):.5f}, L1 Loss: {running_l1_loss/(i+1):.5f}, Cosine Similarity Loss: {running_cs_loss/(i+1):.5f}, Norm: {running_norm/(i+1):.5f}")
+    print(f"Epoch {epoch+1}, Training Loss: {running_loss/(i+1):.5f}, STFT Loss: {running_sftf_loss/(i+1):.5f}, L1 Loss: {running_l1_loss/(i+1):.5f}, Norm: {running_norm/(i+1):.5f}")
     scheduler.step()
 
     # 驗證階段
