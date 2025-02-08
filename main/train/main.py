@@ -87,7 +87,7 @@ class AudioDataset(Dataset):
             # F.pad 的 padding 參數: (left, right)
             wave_tensor = F.pad(wave_tensor, (0, pad_length), "constant", 1e-7)
         
-        wave_tensor = wave_tensor.reshape(self.max_seconds, self.sample_rate)
+        # wave_tensor = wave_tensor.reshape(self.max_seconds, self.sample_rate)
 
         return wave_tensor
 
@@ -113,11 +113,9 @@ val_loader = DataLoader(val_dataset,
 # 準備模型
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Device: {device}")
-model = NanoVC(Training=True).to(device)
+model = NanoVC(training=True).to(device)
 
 # 準備損失函數和優化器
-# criteria_a = nn.MSELoss()
-criteria_b = lambda x, y: 1 - F.cosine_similarity(x, y, dim=-1).mean()
 # optimizer = optim.SGD(model.parameters(), lr=0.04, momentum=0.9, weight_decay=0.0003)
 optimizer = optim.RMSprop(model.parameters(), lr=0.001, weight_decay=0.0003)
 scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=100)
@@ -173,9 +171,10 @@ def stft_mel_loss(output_wave, gt_wave):
 # Test criterion
 for i, ((input1, input2), gt) in enumerate(train_loader):
     input1, input2, gt = input1.to(device), input2.to(device), gt.to(device)
-    output, output_f, input2_f = model(input1, input2)
-    print(output.shape, output_f[-1].shape, input2_f[-1].shape, gt.shape)
-    print(stft_mel_loss(output, gt), criteria_b(output_f[-1], input2_f[-1])) # , criteria_b(input2_f, output_f)
+    print(input1.shape, input2.shape, gt.shape)
+    output= model(input1, input2)
+    print(output.shape, gt.shape)
+    print(stft_mel_loss(output, gt)) # , criteria_b(input2_f, output_f)
     break
 
 # 訓練與測試模型
@@ -184,8 +183,8 @@ for epoch in range(30): # 130
     # 訓練階段
     model.train()
     model.Training = True
+    
     running_sftf_loss = 0.0
-    running_cs_loss = 0.0
     running_l1_loss = 0.0
     running_loss = 0.0
     running_norm = 0
@@ -195,17 +194,10 @@ for epoch in range(30): # 130
     for i, ((input1, input2), gt) in enumerate(tqdm(train_loader)):
         input1, input2, gt = input1.to(device), input2.to(device), gt.to(device)
         optimizer.zero_grad()
-        output, output_f, input2_f = model(input1, input2)
-        output_f = output_f
-        input2_f = input2_f
+        output = model(input1, input2)
         stft_loss = stft_mel_loss(output, gt)
         l1_loss = F.l1_loss(output, gt)
-        cs_loss = criteria_b(output_f, input2_f)
-        # loss = stft_loss + l1_loss + cs_loss
-        if epoch < 15:
-            loss = stft_loss + l1_loss 
-        else:
-            loss = stft_loss + l1_loss + cs_loss
+        loss = stft_loss + l1_loss
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
         optimizer.step()
@@ -217,7 +209,6 @@ for epoch in range(30): # 130
                 total_norm += param_norm.item() ** 2
         total_norm = total_norm ** 0.5
 
-        running_cs_loss += cs_loss.item()
         running_sftf_loss += stft_loss.item()
         running_l1_loss += l1_loss.item()
         running_loss += loss.item()
@@ -232,7 +223,6 @@ for epoch in range(30): # 130
     with torch.no_grad():
         for i, ((input1, input2), gt) in enumerate(tqdm(val_loader)):
             input1, input2, gt = input1.to(device), input2.to(device), gt.to(device)
-            # output, _, _ = model(input1, input2)
             output = model(input1, input2)
             loss = stft_mel_loss(output, gt)
             val_loss += loss.item()
